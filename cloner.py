@@ -1,6 +1,7 @@
 # encoding: utf-8
 
-'''cloner synchronises two directories so that destination is equal to source, ignoring file permissions
+'''
+cloner synchronises two directories so that destination is equal to source, ignoring file permissions
 it can use different methods to test wether two files are equal
 it can create a database to speed up successive synchronisations
 '''
@@ -135,7 +136,7 @@ def copy(p1, p2):
     # clear status message
     print_(' '*79, templine = True, newline = False)
 
-def clone(src_path, dst_path, ask_before_damaging = True, overwrite_existing_files = False, remove_superfluous = False, files_are_equal = compare_hash):
+def clone(src_path, dst_path, ask_before_damaging = True, overwrite_existing_files = False, remove_superfluous = False, files_are_equal = compare_size_date):
     # make sure we're working with unicode strings
     src_path, dst_path = unicode(src_path), unicode(dst_path)
     log('cloning `%s` -> `%s`' % (src_path, dst_path))
