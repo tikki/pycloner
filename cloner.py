@@ -9,7 +9,7 @@ it can create a database to speed up successive synchronisations
 import os
 from stat import *
 import time, sys
-from shutil import copy2, rmtree
+from shutil import copy2, rmtree, copystat
 
 def usage():
     print 'cloner source_path destination_path'
@@ -27,39 +27,55 @@ def main():
         usage()
         exit(1)
     
-    clone(src_path, dst_path)
+    clone(src_path, dst_path, files_are_equal=compare_lazy_and_fix)
     
-cache = {}
-def compare_size_date(p1, p2):
+_compare_size_date_cache = {}
+def compare_size_date(p1, p2, use_cache = True):
     #if not os.path.isfile(p1) or not os.path.isfile(p2):
     #	return False
     # os.stat win7x64/py2.7 (c:/pagefile.sys): nt.stat_result(st_mode=33206, st_ino=0L, st_dev=0, st_nlink=0, st_uid=0, st_gid=0, st_size=5232394240L, st_atime=1295195959L, st_mtime=1295395403L, st_ctime=1252095642L)
     try:
-        if p1 not in cache:
-            cache[p1] = os.stat(p1)
-        s1 = cache[p1]
-        if p2 not in cache:
-            cache[p2] = os.stat(p2)
-        s2 = cache[p2]
+        if not use_cache or p1 not in _compare_size_date_cache:
+            _compare_size_date_cache[p1] = os.stat(p1)
+        s1 = _compare_size_date_cache[p1]
+        if not use_cache or p2 not in _compare_size_date_cache:
+            _compare_size_date_cache[p2] = os.stat(p2)
+        s2 = _compare_size_date_cache[p2]
     except OSError:
         return False
     return S_ISREG(s1[ST_MODE]) and S_ISREG(s2[ST_MODE]) and int(s1.st_mtime) == int(s2.st_mtime) and s1.st_size == s2.st_size
 
 import hashlib
-def compare_hash(p1, p2):
+_compare_hash_cache = {}
+def compare_hash(p1, p2, use_cache = True):
     if not os.path.isfile(p1) or not os.path.isfile(p2):
         return False
     if os.path.getsize(p1) != os.path.getsize(p2):
         return False
-    if p1 not in cache:
+    if not use_cache or p1 not in _compare_hash_cache:
         with open(p1, 'rb') as fd:
-            cache[p1] = hashlib.sha1(fd.read()).digest()
-    if p2 not in cache:
+            _compare_hash_cache[p1] = hashlib.sha1(fd.read()).digest()
+    if not use_cache or p2 not in _compare_hash_cache:
         with open(p2, 'rb') as fd:
-            cache[p2] = hashlib.sha1(fd.read()).digest()
-    return cache[p1] == cache[p2]
+            _compare_hash_cache[p2] = hashlib.sha1(fd.read()).digest()
+    return _compare_hash_cache[p1] == _compare_hash_cache[p2]
+    
+def compare_lazy_and_fix(p1, p2):
+    '''only compares hashes if sizes and attributes don't match
+    then tries to fix attributes if it turns out the hashes match
+    WARNING! this means this function has a side effect on the file system!
+    it can change a file's attributes without user interaction
+    '''
+    if compare_size_date(p1, p2):
+        return True
+    if compare_hash(p1, p2):
+        log('fixing attributes for `%s`'%p2)
+        copystat(p1, p2)
+        return compare_size_date(p1, p2, use_cache = False) # rebuilding cache entry
+    return False
 
 def compare_content(p1, p2):
+    '''stupid uncachable file comparison; not very useful'''
     if not os.path.isfile(p1) or not os.path.isfile(p2):
         return False
     if os.path.getsize(p1) != os.path.getsize(p2):
@@ -180,18 +196,7 @@ def clone(src_path, dst_path, ask_before_damaging = True, overwrite_existing_fil
                             log('removing `%s`' % dst_e)
                             rmtree(dst_e)
         
-        ''' ## creating sub-dirs is handled by creating base dirs already. :]
-        # make sure sub-dirs exist
-        failed_dirs = []
-        for i, dir_name in enumerate(dirs):
-            dst_dir = os.path.join(dst_base, dir_name)
-            if not create_dir(dst_dir):
-                log('skipping `%s`' % dst_dir)
-                failed_dirs.append(i)
-        # remove failed dirs from dir list
-        for offset, i in enumerate(failed_dirs):
-            del dirs[i-offset]
-        '''
+        # creating sub-dirs is handled by creating base dirs already. :]
         
         # copy files
         for file_name in files:

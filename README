@@ -1,0 +1,8 @@
+cloner is a simple python script that clones a part of the file system
+
+it's somewhat like a slow (and possibly unreliable) version of rsync -a
+only that it uses python, which is very handy if you're on a platform that
+doesn't have a good rsync port (e.g. windows - cygwin sucks with unicode).
+
+this current version is neither feature complete nor bug free, so use only
+with utter care. (it does work though! - I use it frequently.)
