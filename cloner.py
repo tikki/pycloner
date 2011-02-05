@@ -45,20 +45,52 @@ def compare_size_date(p1, p2, use_cache = True):
         return False
     return S_ISREG(s1[ST_MODE]) and S_ISREG(s2[ST_MODE]) and int(s1.st_mtime) == int(s2.st_mtime) and s1.st_size == s2.st_size
 
+
 import hashlib
+from multiprocessing import Process, Pipe
+def _compare_hash_helper(path, pipe):
+    with open(path, 'rb') as fd:
+        pipe.send(hashlib.sha1(fd.read()).digest())
+        pipe.close()
 _compare_hash_cache = {}
-def compare_hash(p1, p2, use_cache = True):
-    if not os.path.isfile(p1) or not os.path.isfile(p2):
+def compare_hash(path1, path2, use_cache = True):
+    '''a caching, multi-threaded file content hash compare function
+    tries to do as little as possible and all at once.
+    '''
+    if not os.path.isfile(path1) or not os.path.isfile(path2):
         return False
-    if os.path.getsize(p1) != os.path.getsize(p2):
-        return False
-    if not use_cache or p1 not in _compare_hash_cache:
-        with open(p1, 'rb') as fd:
-            _compare_hash_cache[p1] = hashlib.sha1(fd.read()).digest()
-    if not use_cache or p2 not in _compare_hash_cache:
-        with open(p2, 'rb') as fd:
-            _compare_hash_cache[p2] = hashlib.sha1(fd.read()).digest()
-    return _compare_hash_cache[p1] == _compare_hash_cache[p2]
+    # setting up multiprocessing
+    hash1_proc, hash2_proc = None, None
+    max_name_len = (79-10-4)//2
+    status_msg = 'hashing '
+    if not use_cache or path1 not in _compare_hash_cache:
+        hash1_pipe, child_conn = Pipe()
+        hash1_proc = Process(target=_compare_hash_helper, args=(path1, child_conn))
+        hash1_proc.start()
+        # build status msg
+        status_msg += '`%s..%s`' % (path1[:max_name_len//2-1], path1[-max_name_len//2+1:])
+    if not use_cache or path2 not in _compare_hash_cache:
+        hash2_pipe, child_conn = Pipe()
+        hash2_proc = Process(target=_compare_hash_helper, args=(path2, child_conn))
+        hash2_proc.start()
+        # build status msg
+        if len(status_msg) > 10:
+            status_msg += ', '
+        status_msg += '`%s..%s`' % (path2[:max_name_len//2-1], path2[-max_name_len//2+1:])
+    print_(status_msg, templine = True, newline = False)
+    # getting hashing results (and storing them in cache)
+    if hash1_proc is not None:
+        hash1_proc.join()
+        hash = hash1_pipe.recv()
+        _compare_hash_cache[path1] = hash
+    if hash2_proc is not None:
+        hash2_proc.join()
+        hash = hash2_pipe.recv()
+        _compare_hash_cache[path2] = hash
+    # clear status message
+    print_(' '*79, templine = True, newline = False)
+    # return what we've learned
+    return _compare_hash_cache[path1] == _compare_hash_cache[path2]
     
 def compare_lazy_and_fix(p1, p2):
     '''only compares hashes if sizes and attributes don't match
@@ -102,10 +134,10 @@ def print_(*s, **kw):
         sys.stdout.write('\n')
     
 def error(s):
-    print_('ERR(%f):'%time.time(), s)
+    print_('ERR(%.3f):'%time.time(), s)
 
 def log(s):
-    print_('LOG(%f):'%time.time(), s)
+    print_('LOG(%.3f):'%time.time(), s)
 
 def create_dir(dir_path):
     if not os.path.exists(dir_path):

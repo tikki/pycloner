@@ -2,7 +2,42 @@ cloner is a simple python script that clones a part of the file system
 
 it's somewhat like a slow (and possibly unreliable) version of rsync -a
 only that it uses python, which is very handy if you're on a platform that
-doesn't have a good rsync port (e.g. windows - cygwin sucks with unicode).
+doesn't have a good rsync port (e.g. windows - cygwin DOES NOT always
+properly handle unicode paths).
+
+it has been tested on Windows 7 x64 and seems to work there.
+
+--------------------------------------------------------------------------------
+
+usage:
+	cloner.py src_path dst_path
+	
+it can also easily be imported and used as part of another script
+
+there are currently 3 methods of file comparison:
+	- by size and date only
+	- by hashed file content
+	- by file content
+	
+the first two methods use caching
+the last method shouldn't be used in most scenarios
+
+there is also a hybrid comparison method which uses size & date and falls back
+to using the hash method in case the files don't match. this is now the default.
+ATTENTION! this hybrid method also tries to fix the date (and other stats) of
+a file if the files match by hash(content) and it WON'T ask first.
+
+--------------------------------------------------------------------------------
+
+todo:
+	- add command line options so it becomes a proper tool
+	- fix bugs
+		- (none known..?)
+	- put in more features
+		- more sophisticated methods of comparison
+		- a persistent database
+
+--------------------------------------------------------------------------------
 
 this current version is neither feature complete nor bug free, so use only
-with utter care. (it does work though! - I use it frequently.)
+with utter care.
