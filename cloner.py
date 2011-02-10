@@ -49,8 +49,15 @@ def compare_size_date(p1, p2, use_cache = True):
 import hashlib
 from multiprocessing import Process, Pipe
 def _compare_hash_helper(path, pipe):
+    chunk_size = 2**21 # 2mb
+    hash = hashlib.md5()
     with open(path, 'rb') as fd:
-        pipe.send(hashlib.sha1(fd.read()).digest())
+        while 1:
+            chunk = fd.read(chunk_size)
+            if not len(chunk):
+                break
+            hash.update(chunk)
+        pipe.send(hash.digest())
         pipe.close()
 _compare_hash_cache = {}
 def compare_hash(path1, path2, use_cache = True):
